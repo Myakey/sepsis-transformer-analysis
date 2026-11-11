@@ -16,7 +16,7 @@ from . import gbdt as GB
 from . import metrics as MET
 from . import models as M
 from . import tracking as T
-from .dataset import make_loader
+from .dataset import make_loader, view_rows
 
 STATE = dict(n_boot=300, n_boot_auprc=100)
 CORE_COMMIT = os.environ.get("SEPSIS_CORE_COMMIT", "unknown")
@@ -99,9 +99,11 @@ def rebuild(hp, store):
     return m
 
 
-def predict_store(model, store, idx=None, mode="eval", max_len=None):
-    """Full-coverage scoring. -> rows (ascending), logits (n,3). Every model scored on the same stays returns the same `rows`,
-    which is what makes the paired stay-level bootstrap valid."""
+def predict_store(model, store, idx=None, mode=None, max_len=None):
+    """Score stays under the CURRENT coverage setting (CFG.COVERAGE: "last" = most recent MAX_SEQ_LEN h, as in v3). -> rows (ascending),
+    logits (n,3). Every model scored on the same stays returns the same `rows`, which is what makes the paired bootstrap valid.
+    BUG FIXED 2026-11-11: the default used to be mode="eval" (full coverage), which overrode CFG.COVERAGE. Models trained on the
+    last-168 h view were then scored on every hour, with windows up to 336 h they had never seen, and reported too low."""
     idx = np.arange(len(store.starts)) if idx is None else idx
     loader, _ = make_loader(store, idx, C.CFG.EVAL_BATCH, False, max_len=max_len, mode=mode, pin=E.RT.device.type == "cuda")
     rows, lg, _ = E.predict_loader(model, loader, as_logits=True); o = np.argsort(rows, kind="stable")
@@ -114,7 +116,10 @@ def train_model(bundle, name, hp, *, seed, role, store=None, fit_idx=None, max_e
     `store` overrides the TRAINING labels only (shuffled-label controls); VAL scoring always uses the bundle's real labels."""
     cfg = C.CFG; mdir = model_dir(name); done = os.path.join(mdir, "done.json")
     if os.path.exists(done) and not force:
-        rec = json.load(open(done)); print(f"[{name}] finished earlier -> VAL AUROC {rec['metrics']['auroc_mean']:.4f} (soup), {rec['metrics_single']['auroc_mean']:.4f} (single epoch)")
+        rec = json.load(open(done))
+        if not scored_on_current_view(bundle, name):
+            rec = rescore(bundle, name)
+        print(f"[{name}] finished earlier -> VAL AUROC {rec['metrics']['auroc_mean']:.4f} (soup), {rec['metrics_single']['auroc_mean']:.4f} (single epoch)")
         return rec
     hp = dict(hp)
     if cfg.SMOKE_TEST:
@@ -143,6 +148,36 @@ def train_model(bundle, name, hp, *, seed, role, store=None, fit_idx=None, max_e
     json.dump(rec, open(done, "w"), indent=1, default=_js)
     print(f"[{name}] VAL AUROC soup {met['auroc_mean']:.4f} | single epoch {met_s['auroc_mean']:.4f} | epochs {len(hist)} | soup of {rec['soup_epochs']}")
     del res; gc.collect()
+    if E.RT.device.type == "cuda": torch.cuda.empty_cache()
+    return rec
+
+
+def scored_on_current_view(bundle, name):
+    """True if the saved VAL scores cover exactly the rows of the current coverage view."""
+    p = os.path.join(model_dir(name), "val_scores.npz")
+    if not os.path.exists(p): return False
+    return np.array_equal(np.load(p)["rows"], view_rows(bundle["store"], bundle["val_idx"]))
+
+
+def rescore(bundle, name):
+    """Re-score a finished model on the current view WITHOUT retraining: best.pt (soup) and best_epoch.pt (single epoch) are reloaded,
+    val_scores.npz, done.json and the registry entry are rewritten. Used to repair models scored by the old full-coverage default."""
+    mdir = model_dir(name); rec = json.load(open(os.path.join(mdir, "done.json"))); old = rec["metrics"]["auroc_mean"]
+    m = load_trained(name, bundle["store"], "best.pt"); rows, lg = predict_store(m, bundle["store"], bundle["val_idx"])
+    single_path = os.path.join(mdir, "best_epoch.pt")
+    if os.path.exists(single_path):
+        m = load_trained(name, bundle["store"], "best_epoch.pt"); rows_s, lg_s = predict_store(m, bundle["store"], bundle["val_idx"]); assert np.array_equal(rows, rows_s)
+    else:
+        lg_s = lg                                        # fixed-epoch controls keep no separate best epoch
+    del m
+    met = MET.compute_metrics(bundle["store"], rows, lg); met_s = MET.compute_metrics(bundle["store"], rows, lg_s)
+    np.savez_compressed(os.path.join(mdir, "val_scores.npz"), rows=rows, logits=lg.astype(np.float32), logits_single=lg_s.astype(np.float32))
+    rec.update(metrics=met, metrics_single=met_s, rescored=dict(time=time.strftime("%Y-%m-%dT%H:%M:%S"), reason="old full-coverage scoring default",
+                                                                  old_auroc_mean=old, view=f"{C.CFG.COVERAGE}{C.CFG.MAX_SEQ_LEN}", core_commit=CORE_COMMIT))
+    json.dump(rec, open(os.path.join(mdir, "done.json"), "w"), indent=1, default=_js)
+    registry().register(name, arm=rec["arm"], seed=rec["seed"], role=rec["role"], data_hash=bundle["data_hash"], metrics=met, path=rec["path"], hp=rec["hp"],
+                        extra=dict(metrics_single=met_s, core_commit=CORE_COMMIT, epochs_run=rec["epochs_run"], soup_epochs=rec["soup_epochs"], rescored=True))
+    print(f"[{name}] RE-SCORED on the {C.CFG.COVERAGE}-{C.CFG.MAX_SEQ_LEN} h view: VAL AUROC {old:.4f} -> {met['auroc_mean']:.4f}")
     if E.RT.device.type == "cuda": torch.cuda.empty_cache()
     return rec
 
