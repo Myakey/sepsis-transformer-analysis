@@ -11,15 +11,15 @@ import torch
 
 # <project>/Notebooks/v4/sepsis_core/config.py -> the project root is inferred from where the package lives,
 # so the only place that names the Drive folder is the bootstrap cell that puts Notebooks/v4 on sys.path.
-PROJECT_ROOT = Path(os.environ.get("SEPSIS_PROJECT_ROOT", Path(__file__).resolve().parents[3]))
+_ROOT = Path(os.environ.get("SEPSIS_PROJECT_ROOT", Path(__file__).resolve().parents[3]))
+PROJECT_ROOT = _ROOT
 DRIVE = os.environ.get("SEPSIS_DRIVE_ROOT", "/content/drive/MyDrive")
-
 
 @dataclass
 class Paths:
-    PROJECT_ROOT: str = str(PROJECT_ROOT)
-    DOCS_DIR: str = str(PROJECT_ROOT / "Docs")
-    V3_NOTEBOOK: str = str(PROJECT_ROOT / "Notebooks" / "sepsis_softmax_pipeline_v3.ipynb")
+    PROJECT_ROOT: str = str(_ROOT)
+    DOCS_DIR: str = str(_ROOT / "Docs")
+    V3_NOTEBOOK: str = str(_ROOT / "Notebooks" / "sepsis_softmax_pipeline_v3.ipynb")
     # --- read-only inputs (same locations v3 used) ---
     DATA_PATH: str = f"{DRIVE}/datasets/sepsis_physionet/physionet_style_hourly.parquet"
     SPLIT_SOURCES: tuple = (f"{DRIVE}/sepsis_softmax_pass3/subject_split.parquet", f"{DRIVE}/sepsis_softmax_pass2/subject_split.parquet")
