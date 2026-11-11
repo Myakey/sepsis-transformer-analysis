@@ -1,0 +1,36 @@
+# ---- never commit: copyrighted papers ----
+Resources/
+
+# ---- never commit: data, splits, model artifacts (MIMIC-IV / PhysioNet are credentialed) ----
+*.parquet
+*.csv
+*.psv
+*.db
+*.duckdb
+*.npz
+*.npy
+*.pt
+*.pth
+*.ckpt
+*.zip
+mlruns/
+runs/
+reports/
+sepsis_v4/
+sepsis_data/
+
+# ---- python / notebook noise ----
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# ---- OS / editor ----
+desktop.ini
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
+
+# ---- secrets ----
+.env
+*.token
