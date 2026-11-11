@@ -88,12 +88,13 @@ def test_causal_leakage(bundle):
 
 # ---------------------------------------------------------------- 2 · full coverage ----------------------------------------------------------------
 def test_full_coverage(bundle):
-    """Every row of every stay is predicted exactly once, hence every valid (row, horizon) label gets exactly one prediction;
+    """Full-coverage mode: every row of every stay is predicted exactly once, hence every valid (row, horizon) label gets exactly one prediction;
     every row is trained on exactly once per epoch. Checked with one window per stay AND with forced overlapping windows."""
     st = bundle["store"]; idx = bundle["val_idx"]; detail = {}; ok = True
     all_rows = np.concatenate([np.arange(st.starts[i], st.starts[i] + st.lens[i]) for i in idx])
-    cfg_small = copy.copy(C.CFG); cfg_small.MAX_SEQ_LEN = 24; cfg_small.EVAL_STRIDE = None
-    for tag, cfg in (("one_window_per_stay", C.CFG), ("overlapping_windows_max_len_24", cfg_small)):
+    cfg_full = copy.copy(C.CFG); cfg_full.COVERAGE = "full"; cfg_full.MAX_SEQ_LEN = 336
+    cfg_small = copy.copy(C.CFG); cfg_small.COVERAGE = "full"; cfg_small.MAX_SEQ_LEN = 24; cfg_small.EVAL_STRIDE = None
+    for tag, cfg in (("one_window_per_stay", cfg_full), ("overlapping_windows_max_len_24", cfg_small)):
         for mode, train in (("eval", False), ("train", True)):
             loader, smp = make_loader(st, idx, 16, train, seed=3, cfg=cfg, num_workers=0)
             rows, hist_ok = [], True
@@ -110,9 +111,17 @@ def test_full_coverage(bundle):
             detail[f"{tag}/{mode}"] = dict(rows_expected=int(len(all_rows)), rows_seen=int(len(rows)), each_exactly_once=exact,
                                            valid_labels_covered_per_horizon=per_h, n_windows=len(smp.ds), history_rule_ok=hist_ok)
             ok &= exact and all(per_h) and hist_ok
+    cfg_last = copy.copy(C.CFG); cfg_last.COVERAGE = "last"; cfg_last.MAX_SEQ_LEN = 168          # the v3 view: most recent 168 h, used for training and scoring
+    from .dataset import view_rows
+    want = view_rows(st, idx, cfg_last)
+    for train in (False, True):
+        loader, _ = make_loader(st, idx, 16, train, seed=3, cfg=cfg_last, num_workers=0)
+        got = np.sort(np.concatenate([b_["ROW"][(~b_["PAD"]) & b_["KEEP"]].numpy() for b_ in loader]))
+        detail[f"v3_view_last168/{'train' if train else 'eval'}"] = dict(rows_expected=int(len(want)), rows_seen=int(len(got)), exactly_the_last_168h_once=bool(np.array_equal(got, want)))
+        ok &= bool(np.array_equal(got, want))
     v3 = MET.v3_view_mask(st, all_rows); exp = int(np.minimum(st.lens[idx], C.CFG.V3_VIEW_HOURS).sum())
     detail["v3_view_rows"] = dict(expected=exp, got=int(v3.sum())); ok &= int(v3.sum()) == exp
-    return _result("2 full coverage (each row predicted once; each row trained once per epoch)", ok, **detail)
+    return _result("2 coverage: full mode scores every row once; v3 view scores exactly the last 168 h once", ok, **detail)
 
 
 # ---------------------------------------------------------------- 3 · step-0 equality across arms ----------------------------------------------------------------
@@ -312,7 +321,8 @@ def test_balancing_fit_only(bundle):
                     train_dataset_wrapper=spy, soup_k=0, cfg=_cfg0(), log_prefix="[test8] ")
         loader, _ = make_loader(st, bundle["val_idx"], 16, False, cfg=_cfg0()); r, lg, _ = E.predict_loader(res["model"], loader, as_logits=True)
     fit_rows = np.concatenate([np.arange(st.starts[i], st.starts[i] + st.lens[i]) for i in bundle["fit_idx"]])
-    val_rows = np.concatenate([np.arange(st.starts[i], st.starts[i] + st.lens[i]) for i in bundle["val_idx"]])
+    from .dataset import view_rows
+    val_rows = view_rows(st, bundle["val_idx"], _cfg0())          # the rows scored under the current coverage setting
     detail["balanced_training_rows_subset_of_FIT"] = bool(np.isin(rows_seen[0], fit_rows).all())
     detail["VAL_scored_once_at_natural_distribution"] = bool(np.array_equal(np.sort(r), np.sort(val_rows)))
     detail["calibration_refuses_FIT_rows"] = _raises(lambda: CAL.calibrate(st, r, lg, fold_label=np.array(["FIT"] * len(r))), PermissionError)

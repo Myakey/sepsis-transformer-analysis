@@ -72,8 +72,12 @@ def attention_mass(model, loader, n_batches=2):
     """Mean total attention mass M_t = sum_j a_tj over real queries, per layer. Exactly 1 for softmax arms; free for sigmoid / kernel_raw.
     Logged every epoch (PDF Part D): collapse toward 0 = attention bypassed; unbounded growth = scale drift."""
     model.eval(); sums = None; cnt = 0
-    for i, b in enumerate(loader):
-        if i >= n_batches: break
+    rng_state = torch.get_rng_state()             # iterating a DataLoader draws from the global generator; restore it afterwards so the
+    try:                                          # training random stream (dropout, shuffling) is exactly what it would be without this probe
+        batches = [b for i, b in zip(range(n_batches), loader)]
+    finally:
+        torch.set_rng_state(rng_state)
+    for i, b in enumerate(batches):
         b = to_dev(b)
         with torch.autocast(device_type=RT.device.type, dtype=RT.amp, enabled=RT.amp is not None):
             model(b["X"], b["M"], b["D"], b["XL"], b["S"], b["G"], b["hrs"], b["E"], build_attn_mask(b["PAD"]))

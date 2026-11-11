@@ -52,7 +52,7 @@ class Cfg:
     SMOKE_TEST: bool = False
     SEED: int = 42
     SEEDS: tuple = (42, 1042, 2042, 3042, 4042)          # 5 paired seeds per arm; the first three are v3's
-    RUN_NAME: str = "v4"
+    RUN_NAME: str = "v4_last168"      # run folder. Changed from "v4" so nothing trained under the 336 h full-coverage setting is reused
     ALLOW_RESUME: bool = True
     # ---- columns ----
     ID_COL: str = "stay_id"; SUBJECT_COL: str = "subject_id"; HOUR_COL: str = "ICULOS"; LABEL_COL: str = "SepsisLabel"
@@ -63,7 +63,9 @@ class Cfg:
     # ---- model constraints ----
     RHO: float = 0.25
     SIGMA: float = 0.15
-    MAX_SEQ_LEN: int = 336            # v4: the longest stay is 336 h, so one window covers every stay (v3: 168, most-recent window only)
+    MAX_SEQ_LEN: int = 168            # v3 value
+    COVERAGE: str = "last"            # "last" = v3 behaviour: train AND evaluate on each stay's most recent MAX_SEQ_LEN hours.
+                                      # "full" = every hour of every stay (needs MAX_SEQ_LEN = 336 for one window per stay). See DECISIONS.md C25.
     V3_VIEW_HOURS: int = 168          # bridge to v3 numbers: metrics restricted to each stay's most recent 168 h
     EVAL_STRIDE: int = None           # only used if a stay is longer than MAX_SEQ_LEN (never on MIMIC/PhysioNet); None -> MAX_SEQ_LEN // 2
     Z_CLIP: float = 8.0

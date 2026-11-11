@@ -96,13 +96,22 @@ class StayBatchSampler(torch.utils.data.Sampler):
 
 def make_loader(store, stay_idx, batch_size, train, max_len=None, seed=0, mode=None, cfg=None, num_workers=None, pin=False):
     cfg = cfg or C.CFG
-    mode = mode or ("train" if train else "eval")
+    mode = mode or ("last" if getattr(cfg, "COVERAGE", "last") == "last" else ("train" if train else "eval"))
     ds = StayDataset(store, stay_idx, max_len or cfg.MAX_SEQ_LEN, mode=mode, stride=cfg.EVAL_STRIDE)
     sampler = StayBatchSampler(ds, batch_size, train, seed, cell_budget=None if train else cfg.EVAL_CELL_BUDGET)
     nw = cfg.NUM_WORKERS if num_workers is None else num_workers
     kw = dict(num_workers=nw, pin_memory=pin)
     if nw > 0: kw.update(persistent_workers=False, prefetch_factor=4)
     return torch.utils.data.DataLoader(ds, batch_sampler=sampler, collate_fn=collate, **kw), sampler
+
+
+def view_rows(store, stay_idx, cfg=None):
+    """The rows that are trained on / scored under the current coverage setting, ascending."""
+    cfg = cfg or C.CFG; out = []
+    for i in stay_idx:
+        s, l = int(store.starts[i]), int(store.lens[i]); n = min(l, cfg.MAX_SEQ_LEN) if getattr(cfg, "COVERAGE", "last") == "last" else l
+        out.append(np.arange(s + l - n, s + l))
+    return np.sort(np.concatenate(out)) if out else np.zeros(0, np.int64)
 
 
 def build_attn_mask(pad):

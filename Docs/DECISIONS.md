@@ -62,6 +62,14 @@ Items marked **→ PREREG** must be copied into `Docs/PREREGISTRATION.md` before
 | C23 | Not built in Phase 2: the PhysioNet-2019 utility score (brief: "if it's cheap"), the optional v3 ladder re-run, and the attention replication on set B (needs the P1–P4 battery, Phase 3). | Each needs its own tested code. |
 | C24 | `01b` stops after the harmonisation table until `HARMONISATION_REVIEWED = True`. Unit conversions are entered by you as `UNIT_FIXES`, never guessed by the code. | "Verify units before anything runs." |
 
+## 2026-11-11 · Back to v3's window (Miaki)
+
+| # | Decision |
+|---|---|
+| C25 | **C1 is reversed.** Default is again v3's view: `MAX_SEQ_LEN = 168`, and each stay contributes its most recent 168 hours for both training and evaluation (`CFG.COVERAGE = "last"`). Reason: the first full run under the 336 h full-coverage setting gave about 0.73 VAL AUROC against v3's 0.807. **The cause is not yet established.** v3's final training also used all 45,685 FIT stays, so the number of stays did not change; what changed was the window (168 → 336 h) and training on every hour of long stays. If `softmax_s42` returns to about 0.807 under this setting, the long window was the cause; if not, the cause is elsewhere. Consequences: 95.6 % of stays are still predicted from ICU hour 1; for the 4.4 % longer stays the hours before the last 168 are not scored. Full coverage stays available as `COVERAGE = "full"` with `MAX_SEQ_LEN = 336`, for a labelled side analysis only. Run folder renamed to `v4_last168` so nothing trained under the old setting is reused. LightGBM is scored on the same rows as the Transformer, as in v3. |
+| C26 | The per-epoch attention-mass probe now restores the global random state, so training consumes the same random stream as v3's loop. |
+| C27 | `runs.setup` refuses a full run while the configuration is still in smoke mode from an earlier run in the same runtime. |
+
 ## Open items
 
 | # | Item | Needed by |

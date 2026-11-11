@@ -26,12 +26,15 @@ CORE_COMMIT = os.environ.get("SEPSIS_CORE_COMMIT", "unknown")
 def setup(smoke=False, experiment=None, need_data=True):
     """Call once per notebook, right after the bootstrap cell."""
     if smoke: C.CFG.apply_smoke()
+    elif C.CFG.SMOKE_TEST:
+        raise RuntimeError("The configuration is still in SMOKE mode from an earlier run in this runtime (tiny model, 2 epochs). "
+                           "Re-run Cell 1 (it reloads the package) and then this cell before a full run.")
     C.CFG.NUM_WORKERS = 0 if E.RT.device.type == "cpu" else 2
     C.require_mounted(need_data=need_data)
     T.setup_tracking(experiment or C.CFG.MLFLOW_EXPERIMENT)
     STATE.update(n_boot=30 if smoke else 300, n_boot_auprc=20 if smoke else 100)
     print(f"run={C.CFG.RUN_NAME} | smoke={C.CFG.SMOKE_TEST} | device={E.RT.device} amp={E.RT.amp} | core commit={CORE_COMMIT[:12]} | "
-          f"artifacts={run_root()} | mlflow={'ON ' + str(T.TRACKING['uri']) if T.TRACKING['enabled'] else 'OFF'}")
+          f"view={'v3: most recent ' + str(C.CFG.MAX_SEQ_LEN) + ' h per stay' if C.CFG.COVERAGE == 'last' else 'full coverage'} | artifacts={run_root()} | mlflow={'ON ' + str(T.TRACKING['uri']) if T.TRACKING['enabled'] else 'OFF'}")
 
 
 def run_root(): return os.path.join(C.PATHS.WORK_DIR, C.CFG.RUN_NAME)

@@ -10,6 +10,7 @@ import numpy as np
 
 from . import config as C
 from . import balancing as BAL
+from .dataset import view_rows
 
 PARAMS = dict(objective="binary", metric="auc", learning_rate=0.03, num_leaves=127, min_data_in_leaf=200, feature_fraction=0.7,
               lambda_l2=1.0, bagging_fraction=1.0, max_bin=255, verbose=-1, device_type="cpu")
@@ -65,6 +66,8 @@ def train(store, pre, fit_idx, val_idx, with_iculos=False, time_blind=False, smo
         if k == 0:
             gain = bst.feature_importance("gain"); top = [names[i] for i in np.argsort(-gain)[:12]]
         del Xtr, ytr, dtr, dva
+    keep = np.isin(r_val, view_rows(store, val_idx))          # like v3: trained on all FIT rows, scored on exactly the rows the Transformer is scored on
+    r_val, scores = r_val[keep], scores[keep]
     return dict(rows=r_val, scores=scores, boosters=boosters, names=names, best_iter=best_iter, top_features=top, n_synthetic=n_syn,
                 with_iculos=with_iculos, time_blind=time_blind, smote_ratio=smote_ratio)
 
@@ -73,6 +76,7 @@ def predict(g, store, pre, stay_idx):
     """Score another set of stays (e.g. an external cohort) with trained boosters. -> rows, probabilities (n,H)."""
     rows, X, names = row_matrix(store, pre, stay_idx, g["with_iculos"], g["time_blind"])
     assert names == g["names"], "feature layout differs from the trained model"
+    keep = np.isin(rows, view_rows(store, stay_idx)); rows, X = rows[keep], X[keep]
     return rows, np.stack([b.predict(X, num_iteration=it) for b, it in zip(g["boosters"], g["best_iter"])], 1).astype(np.float32)
 
 
