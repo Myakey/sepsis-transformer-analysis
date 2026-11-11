@@ -34,29 +34,28 @@ def end_active_runs():
     return n
 
 
-def setup_tracking(experiment, use_dagshub=True, local_dir="."):
-    """DagsHub if the Colab secrets DAGSHUB_USER / DAGSHUB_REPO / DAGSHUB_TOKEN exist, otherwise a local ./mlruns store. Never raises."""
+def setup_tracking(experiment, use_dagshub=True, local_dir=None):
+    """DagsHub only, credentials from Colab secrets: DAGSHUB_USER, DAGSHUB_REPO, DAGSHUB_TOKEN [, DAGSHUB_REPO_OWNER].
+    There is no local fallback: a store on Colab disk disappears with the runtime. If DagsHub cannot be reached, tracking is OFF
+    and says so; checkpoints and manifest.json on Drive are still written. Never raises."""
+    TRACKING.update(enabled=False, remote=False, uri=None, fails=0)
     if mlflow is None:
-        print("[mlflow] not installed -> tracking off (checkpoints and the manifest are still written)"); return TRACKING
+        print("[mlflow] NOT INSTALLED -> tracking OFF. Run: pip install mlflow"); return TRACKING
     os.environ.setdefault("MLFLOW_HTTP_REQUEST_TIMEOUT", "30"); os.environ.setdefault("MLFLOW_HTTP_REQUEST_MAX_RETRIES", "3")
     end_active_runs()
-    if use_dagshub:
-        try:
-            user, repo, token = _secret("DAGSHUB_USER"), _secret("DAGSHUB_REPO"), _secret("DAGSHUB_TOKEN")
-            owner = _secret("DAGSHUB_REPO_OWNER") or user
-            if not (owner and repo and token): raise RuntimeError("DagsHub secrets not set")
-            os.environ["MLFLOW_TRACKING_USERNAME"] = user; os.environ["MLFLOW_TRACKING_PASSWORD"] = token
-            mlflow.set_tracking_uri(f"https://dagshub.com/{owner}/{repo}.mlflow"); mlflow.set_experiment(experiment)
-            TRACKING.update(enabled=True, remote=True, uri=mlflow.get_tracking_uri(), fails=0)
-            print("[mlflow] connected to DagsHub:", TRACKING["uri"]); return TRACKING
-        except Exception as e:
-            print(f"[mlflow] DagsHub unavailable ({type(e).__name__}: {str(e)[:160]}) -> LOCAL store")
+    user, repo, token = _secret("DAGSHUB_USER"), _secret("DAGSHUB_REPO"), _secret("DAGSHUB_TOKEN")
+    owner = _secret("DAGSHUB_REPO_OWNER") or user
+    missing = [n for n, v in (("DAGSHUB_USER", user), ("DAGSHUB_REPO", repo), ("DAGSHUB_TOKEN", token)) if not v]
+    if missing:
+        print(f"[mlflow] TRACKING OFF: Colab secret(s) missing: {missing}. Add them (key icon, 'Notebook access' on) and re-run this cell."); return TRACKING
     try:
-        uri = "file://" + os.path.join(os.path.abspath(local_dir), "mlruns")
-        mlflow.set_tracking_uri(uri); mlflow.set_experiment(experiment)
-        TRACKING.update(enabled=True, remote=False, uri=uri, fails=0); print("[mlflow] LOCAL tracking at", uri)
+        os.environ["MLFLOW_TRACKING_USERNAME"] = user; os.environ["MLFLOW_TRACKING_PASSWORD"] = token
+        mlflow.set_tracking_uri(f"https://dagshub.com/{owner}/{repo}.mlflow")
+        mlflow.set_experiment(experiment)                      # first REST call: validates the URI and the token
+        TRACKING.update(enabled=True, remote=True, uri=mlflow.get_tracking_uri())
+        print("[mlflow] connected to DagsHub:", TRACKING["uri"], "| experiment:", experiment)
     except Exception as e:
-        TRACKING.update(enabled=False); print(f"[mlflow] tracking off ({type(e).__name__}: {str(e)[:160]})")
+        print(f"[mlflow] TRACKING OFF: DagsHub unreachable ({type(e).__name__}: {str(e)[:200]}). Nothing is being logged remotely.")
     return TRACKING
 
 
