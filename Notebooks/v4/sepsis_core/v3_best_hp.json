@@ -1,0 +1,24 @@
+{
+ "source": "sepsis_softmax_pipeline_v3.ipynb cell 9 (Optuna) printed BEST_HP; extracted by script, not retyped",
+ "best_line": "BEST val auroc_mean = 0.7978 (v2 best trial 0.7919) | source: trial 11",
+ "hp": {
+  "d_model": 768,
+  "num_heads": 8,
+  "num_layers": 4,
+  "ffn_mult": 3,
+  "dropout": 0.14795346171929938,
+  "lr": 2.5256996217084768e-05,
+  "weight_decay": 4.989327324346609e-05,
+  "batch_size": 32,
+  "focal_gamma": 1.0,
+  "use_iculos": false,
+  "eng": 0,
+  "loss": "focal",
+  "pos_enc": true,
+  "ema": 0.0,
+  "train_all_hours": false,
+  "aux_w": 0.05,
+  "focal_alpha": 0.8778585109647381,
+  "pos_weight": 10.322302065524811
+ }
+}
