@@ -39,6 +39,29 @@ Items marked **→ PREREG** must be copied into `Docs/PREREGISTRATION.md` before
 | C11 | v4 run artifacts go to `MyDrive/sepsis_v4` (`Paths.WORK_DIR`). | Same pattern as v3's `sepsis_softmax_pass3`; checkpoints are too large for the project folder. See O3. |
 | C12 | Reserved folds are enforced in code (`data.FoldGuard`): training stages cannot load LOC/CONF/EXT; any stage needs `Docs/PREREGISTRATION.md` **and** a `Docs/PREREGISTRATION.frozen` stamp before touching them. | Turns non-negotiable 2 into something that fails loudly. |
 
+## 2026-11-11 · Phase 1 result and repo (Miaki)
+
+- `00_core_tests` is green on synthetic data and on real FIT/VAL (10/10), including the bitwise match to the v3 classes and the notebook-hash check.
+- Code lives in `github.com/Myakey/sepsis-transformer-analysis`. Every notebook clones it and imports `sepsis_core` from the clone. **The git commit hash is the core version**; it is written into every checkpoint record, the manifest and MLflow. Pin `REPO_REF` to a commit hash for any run that will be reported.
+- MLflow logs to DagsHub only (Colab secrets). There is no local fallback.
+
+## 2026-11-11 · Calls made while building Phase 2 (Claude; accepted unless you object)
+
+| # | Call | Why |
+|---|---|---|
+| C13 | **KA-Transformer is trained with our recipe** (v3 winner's optimiser, learning rate, batch size, focal loss, schedule, early stopping, soup), without the auxiliary head. The paper's lr 1e-5 / batch 256 / 100 epochs is not used. | "Their architecture, my protocol": with one training recipe the comparison isolates the architecture. The paper's settings were chosen for one sample per patient and would under-train an hourly model in 24 epochs. |
+| C14 | **Budget-matched shuffled-label controls** use the primary run's seed (so the same initial weights), the same 24-epoch cosine schedule, and stop after exactly as many epochs as the primary ran; the last epoch is taken. | Matches initial weights, learning-rate trajectory and number of updates. Stopping on VAL AUROC is meaningless for shuffled labels. |
+| C15 | Three shuffled-label controls per primary arm: v3 protocol (band member), budget-matched, budget-matched with the aux head off. The exploratory kernel arm gets the v3-protocol control only. | v3 → budget-matched isolates the training budget; budget-matched → aux-off isolates the physiology-forecasting task. |
+| C16 | Warmup control: softmax with 2× warmup on 3 seeds. | Enough to show whether warmup length alone moves AUROC by more than the seed SD. |
+| C17 | Sigmoid fallback grid: learning rate × {0.5, 2, 4} at the primary seed; LayerScale initialised at 1e-4 in both arms. Runs only if the sigmoid arm fails the gate. | Learning-rate-only tuning as pre-registered; 1e-4 is the LayerScale initialisation Ramapuram et al. report using. |
+| C18 | LightGBM SMOTE adds synthetic positives up to 25 % of the negatives (`SMOTE_RATIO`), not 1:1. Binary "was measured" features are interpolated like any other feature. | 1:1 needs several GB more RAM than Colab has for 2.3 M rows. The fractional-flag artefact is the standard SMOTE limitation and is stated in the notebook. |
+| C19 | LightGBM gets a **time-blind** variant: time-since-measurement is set to its cap for features never measured so far. | v3's "no ICULOS" trees could still read the hour through that channel. Rolling 6 h windows still shorten in a stay's first hours, so a little time information remains; this is stated, not hidden. |
+| C20 | PhysioNet onset = first positive hour + 6. A record positive on its first row has a censored onset (true onset in hours 4–7): flagged, kept in the all-stays view, excluded from the matched stratum. The matched stratum is defined identically for both cohorts on the processed data (length ≥ 8 h after dropping post-onset rows; non-septic or onset ≥ 4 h; not censored). | Follows from the Challenge's label rule and exclusions (Reyna et al. 2020). |
+| C21 | Directions 2 (PhysioNet → MIMIC) and 3 (A ↔ B) run without the explicit ICULOS input and with fewer models (softmax + KA + LightGBM; softmax + LightGBM). Direction 1 runs softmax, sigmoid, KA and LightGBM, each ±ICULOS. | Keeps the notebook to a few GPU-hours; direction 1 is the primary one. |
+| C22 | A model name means one model across notebooks (`softmax_s42` is trained once and reused by `01`, `01b` and `02`). | No silent duplicates with different weights. |
+| C23 | Not built in Phase 2: the PhysioNet-2019 utility score (brief: "if it's cheap"), the optional v3 ladder re-run, and the attention replication on set B (needs the P1–P4 battery, Phase 3). | Each needs its own tested code. |
+| C24 | `01b` stops after the harmonisation table until `HARMONISATION_REVIEWED = True`. Unit conversions are entered by you as `UNIT_FIXES`, never guessed by the code. | "Verify units before anything runs." |
+
 ## Open items
 
 | # | Item | Needed by |

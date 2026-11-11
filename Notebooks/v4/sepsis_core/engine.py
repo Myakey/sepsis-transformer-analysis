@@ -125,10 +125,12 @@ def greedy_soup(model, topk, va_loader, store, sel, log_prefix=""):
 
 
 def fit(hp, store, fit_idx, val_idx, *, max_epochs, patience, seed, alpha=None, pw=None, pre=None, ckpt_dir=None, resume=False,
-        log_prefix="", soup_k=None, fixed_epochs=False, train_dataset_wrapper=None, model_factory=None, cfg=None):
+        log_prefix="", soup_k=None, fixed_epochs=False, stop_after_epochs=None, train_dataset_wrapper=None, model_factory=None, cfg=None):
     """Train one model. Returns dict(model, history, best, single, single_state, soup_epochs, n_params, hp, init_state).
 
     fixed_epochs=True      run exactly max_epochs (budget-matched controls whose VAL AUROC is meaningless, e.g. shuffled labels).
+    stop_after_epochs      stop after this many epochs while KEEPING the max_epochs learning-rate schedule (budget-matched controls:
+                           same schedule and number of updates as the model they are matched to).
     train_dataset_wrapper  callable(dataset) -> dataset, the ONLY hook through which balancing enters; it is applied to the FIT
                            training set and nothing else (see balancing.py, which also checks the folds).
     model_factory          callable(hp, store) -> nn.Module for non-default families (KA-Transformer); default is build_model.
@@ -166,6 +168,7 @@ def fit(hp, store, fit_idx, val_idx, *, max_epochs, patience, seed, alpha=None, 
     score, met, ep = best["score"], best["metrics"], start_ep - 1
     try:
         for ep in range(start_ep, max_epochs):
+            if stop_after_epochs is not None and ep >= int(stop_after_epochs): break
             if bad >= patience and not fixed_epochs: break
             t0 = time.time(); model.train(); tr_sampler.set_epoch(ep)
             loss_sum = torch.zeros((), device=RT.device); aux_sum = torch.zeros((), device=RT.device); gn_sum = torch.zeros((), device=RT.device)
