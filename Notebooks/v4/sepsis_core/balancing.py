@@ -37,7 +37,7 @@ class OversampledDataset(torch.utils.data.Dataset):
 def oversample_positive_windows(store, target_pos_fraction=0.5, max_ratio=50):
     """-> wrapper for engine.fit(train_dataset_wrapper=...). Chooses the repeat ratio so positive windows are ~target fraction of items."""
     def wrapper(ds):
-        if ds.mode != "train": raise PermissionError("balancing wraps the training dataset only")
+        if ds.mode not in ("train", "last"): raise PermissionError("balancing wraps the training dataset only")
         stay_of_item = np.searchsorted(store.starts, ds.a, side="right") - 1
         _require_fit(np.asarray(store.stay_fold)[stay_of_item], "oversample_positive_windows")
         n_pos = int(ds.has_pos.sum()); n_neg = len(ds) - n_pos
