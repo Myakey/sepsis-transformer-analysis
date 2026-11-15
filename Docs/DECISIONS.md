@@ -79,3 +79,41 @@ Items marked **→ PREREG** must be copied into `Docs/PREREGISTRATION.md` before
 | O3 | Confirm `MyDrive/sepsis_v4` as the v4 artifact folder (it is outside `Notebooks/v4/` and `Docs/`, but so were v3's checkpoints). | Before you run `02` |
 | O4 | Reference conflicts between §10 and the methodology PDF: R20 author list (§10: Makelov, Lange & Nanda; PDF adds Geiger), R22 venue (§10: arXiv; PDF: NeurIPS 2025), R31 pages (2600–2606 vs 2600–2605), R1 authors ("Unknown" in §10; the PDF in `Resources/` gives Zhu, Cheng, Zhang, Zhang, Hong, Wang & Xiao, Discover Applied Sciences 7:218). | Phase 4 |
 | O5 | PDFs to add before Phase 2: **R10** (Chawla et al. 2002, SMOTE). Two papers the agreed design relies on are not in §10; proposed for addition: Touvron, H., Cord, M., Sablayrolles, A., Synnaeve, G., & Jégou, H. (2021). Going deeper with Image Transformers. *ICCV 2021* (LayerScale, for A9); Wortsman, M., et al. (2022). Model soups: averaging weights of multiple fine-tuned models improves accuracy without increasing inference time. *ICML 2022* (checkpoint soup, cited in v3's code). Both `[unverified, PDF not provided]` until added. | Phase 2 |
+
+## 2026-11-15 · Start of Phase 3 (Miaki)
+
+| # | Decision |
+|---|---|
+| A15 | **Reference substitutions in §10.** R13 (Aitchison 1982) is replaced by Greenacre, M. (2021). *Compositional data analysis — linear algebra, visualization and interpretation.* arXiv:2110.12439 (used for: clr DV). R18 (Geiger, Lu, Icard & Potts 2021) is replaced by Geiger, A., Ibeling, D., Zur, A., Chaudhary, M., Chauhan, S., Huang, J., Arora, A., Wu, Z., Goodman, N., Potts, C., & Icard, T. (2025). *Causal Abstraction: A Theoretical Foundation for Mechanistic Interpretability.* JMLR 26, 1–63 (used for: interchange interventions, IIA, P7). Both PDFs are in `Resources/` and were checked: Greenacre defines the centred log-ratio; Geiger et al. define interchange intervention accuracy (their Definition 48). The methodology PDF still cites the old entries; this log is the record of the change. |
+| A16 | **Notebooks are not executed by Claude at all**, including smoke tests on synthetic data. Miaki runs every test. |
+
+## 2026-11-15 · Found while reading for Phase 3 (Claude)
+
+| # | Finding | Consequence |
+|---|---|---|
+| C28 | **The per-epoch mass probe is not representative.** `engine.attention_mass` reads the first two evaluation batches, which the length-sorted sampler fills with the 256 shortest VAL stays, at every query position. The reported sigmoid mass (0.24–0.26) and `kernel_raw` mass (0.039) describe those stays only. The "init ≈ 0.88" beside it in the handoff comes from the small smoke models in `00`, on other data. | The two leads (S3, kernel_raw) stand as leads only. `03` measures total mass on the analysis queries, by layer and position. `PREREGISTRATION.md` 6.1. The probe itself is left as is (changing it would not change any trained model). |
+| C29 | **The PDF's four-outcome table is defined by intervention**, so it is decided in `04`. The brief (§5) and the handoff place it in `03`. | `03` reports a labelled correlational analogue. `PREREGISTRATION.md` 8. |
+| C30 | **EXT:** A14 says one table at the very end; the PDF (P7) asks for replication on EXT. | One EXT pass at the end holds both. `PREREGISTRATION.md` 3. Needs Miaki's approval. |
+| C31 | **PDF P7 leaves IIA undefined for a model that predicts a constant vector** (M0 always; M2 under do(Priority)): Kendall τ against a constant does not exist. | Match rule proposed in `PREREGISTRATION.md` 7.7. Needs Miaki's approval. |
+| C32 | **E3 (layer-1 zero) holds for S1 only.** Under S0 the decay features of later hours are recomputed, so their inputs change. | S1 is the primary site for allocation quantities; S0 is reported beside it. `PREREGISTRATION.md` 7.2–7.3. |
+| C33 | v3's DISCOVERY/SCREEN stay IDs are in `V3_FINAL_DIR/correlation/correlational_summary.json` (keys `discovery_stays`, `screen_stays`), one folder below where the handoff and the `config.py` comment put it. | `03` reads that path. |
+| C34 | The saved output of `00_core_tests` is from commit `77d2dc7` with `MAX_SEQ_LEN = 336`, before C25. | Re-run `00` once on the commit pinned for `03`. |
+
+## Open items, status on 2026-11-15
+
+| # | Status |
+|---|---|
+| O1 | Rewording drafted in `PREREGISTRATION.md` 7.3; closes when the file is frozen. |
+| O2, O3 | Closed in practice: Phase 2 ran from the repo clone and wrote its artifacts to `MyDrive/sepsis_v4`. |
+| O4 | Checked against the PDFs in `Resources/`: R20 has three authors (Makelov, Lange, Nanda), as in §10; R22 is Sutter, Minder, Hofmann & Pimentel, arXiv:2507.08802 (the copy in `Resources/` is the arXiv version, so the NeurIPS venue is not confirmed from it); R19 is CLeaR 2024 (PMLR 236). R1 authors and R31 pages still to be settled in Phase 4. |
+| O5 | R10 (SMOTE) and Wortsman 2022, Moor 2021, Fleuren 2020, Wong 2021, Kamran 2024, Harutyunyan 2019 and Caruana et al. are now in `Resources/`. Still missing: Touvron et al. 2021 (LayerScale), needed only if the sigmoid fallback is ever run. Every Phase 3 reference (R13–R25, with A15) is present. |
+| O6 | New. Sources for Benjamini–Hochberg FDR and for random-effects prediction intervals are not in §10. To be proposed with full citations; `[unverified, PDF not provided]` until added. |
+| H1 | Unchanged: Unit1/Unit2 coding in the MIMIC cohort build not yet confirmed. |
+
+## 2026-11-15 · Pre-registration frozen (Miaki)
+
+| # | Decision |
+|---|---|
+| A17 | **`Docs/PREREGISTRATION.md` is frozen** (stamp `Docs/PREREGISTRATION.frozen`, sha256 `e7f926d38bce508b20396f8f6d02b4b09ae3c92e87552560700f71f2b99b1b9e`). Section 13: items 1, 2, 4–10 and 12 approved as written; item 3 approved with Miaki's addition (if the paired softmax knockout also costs less than 0.01 AUROC, the outcome is "attention contributes little in either arm", pre-specified in 6.2 with its reading of the four-outcome table); item 11 approved with a limitation line in 5.4 (control seed variance is not estimated). This settles C30 and C31 and closes O1. |
+| A18 | **Two references added outside §10's numbering**, both in `Resources/` and checked against the PDFs: Benjamini & Hochberg (1995), *JRSS B* 57(1), 289–300 (FDR); Riley, Higgins & Deeks (2011), *BMJ* 342, d549 (prediction intervals in random-effects meta-analysis). This closes O6. |
+| A19 | From now on any change to a rule in the frozen file is a deviation: logged in `DEVIATIONS.md` with date, reason and Miaki's approval before the affected analysis runs. `03` and `04` may now be built. LOC, CONF and EXT are unlocked in `data.FoldGuard` by the stamp; the CONF-A/CONF-B halves and the single EXT pass still have to be enforced in code before `04` is handed over. |

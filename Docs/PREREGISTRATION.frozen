@@ -1,0 +1,11 @@
+PREREGISTRATION FROZEN
+file:        Docs/PREREGISTRATION.md
+frozen on:   2026-11-15 (Asia/Jakarta)
+approved by: Miaki (section 13 decisions given 2026-11-15; item 3 with Miaki's addition, item 11 with the limitation line)
+written by:  Claude, on Miaki's instruction to freeze
+sha256:      e7f926d38bce508b20396f8f6d02b4b09ae3c92e87552560700f71f2b99b1b9e
+bytes:       38887 (UTF-8; the hash is of the file with LF line endings)
+split sha1:  65441cff1a47
+
+After this stamp the file is not edited. Every change goes in Docs/DEVIATIONS.md with date, reason and approval, before the affected analysis runs.
+CONF-A / CONF-B subject counts (rule in section 3): to be appended below the first time the split table is read in 04. Nothing else is appended.
