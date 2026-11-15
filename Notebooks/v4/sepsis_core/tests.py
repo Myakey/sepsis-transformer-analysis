@@ -293,7 +293,26 @@ def test_forbidden_guard(bundle):
         detail["train_stage_refuses_reserved_folds"] = all(_raises(lambda f=f: D.attach_folds(df.copy(), sp, ("FIT", "VAL", f), D.FoldGuard("train")), PermissionError) for f in C.CFG.RESERVED_FOLDS)
         detail["causal_stage_refused_until_prereg_frozen"] = _raises(lambda: D.FoldGuard("causal", docs_dir=td).check({"LOC"}), PermissionError)
         open(os.path.join(td, "PREREGISTRATION.md"), "w").write("x"); open(os.path.join(td, "PREREGISTRATION.frozen"), "w").write("x")
-        detail["causal_stage_allowed_after_freeze"] = bool(D.FoldGuard("causal", docs_dir=td).check({"LOC", "CONF"}))
+        detail["causal_stage_allowed_after_freeze"] = bool(D.FoldGuard("causal", docs_dir=td).check({"LOC"}))
+        detail["whole_CONF_never_loadable"] = all(_raises(lambda s=s: D.FoldGuard(s, docs_dir=td).check({"CONF"}), PermissionError) for s in ("causal", "fix", "final_ext"))
+        detail["CONF_B_and_EXT_refused_in_causal_stage"] = _raises(lambda: D.FoldGuard("causal", docs_dir=td).check({"CONF_B"}), PermissionError) and _raises(lambda: D.FoldGuard("causal", docs_dir=td).check({"EXT"}), PermissionError)
+        _smoke = C.CFG.SMOKE_TEST; C.CFG.SMOKE_TEST = False
+        try:
+            detail["CONF_A_closed_until_LOC_CHOICES"] = _raises(lambda: D.FoldGuard("causal", docs_dir=td).check({"CONF_A"}), PermissionError)
+            open(os.path.join(td, "LOC_CHOICES.md"), "w").write("x")
+            detail["CONF_A_open_after_LOC_CHOICES"] = bool(D.FoldGuard("causal", docs_dir=td).check({"CONF_A"}))
+            led = os.path.join(td, "ext.json"); mark = os.path.join(td, "done.json")
+            detail["EXT_needs_completion_markers"] = _raises(lambda: D.FoldGuard("final_ext", docs_dir=td, ledger=led, prerequisites=[mark]).check({"EXT"}), PermissionError)
+            open(mark, "w").write("{}")
+            detail["EXT_opens_once_markers_exist"] = bool(D.FoldGuard("final_ext", docs_dir=td, ledger=led, prerequisites=[mark]).check({"EXT"}))
+            D.ext_ledger_close("report.json", ledger=led)
+            detail["EXT_refused_after_the_single_pass"] = _raises(lambda: D.FoldGuard("final_ext", docs_dir=td, ledger=led, prerequisites=[mark]).check({"EXT"}), PermissionError)
+            C.CFG.SMOKE_TEST = True
+            detail["reserved_confirmation_folds_refused_in_smoke_mode"] = _raises(lambda: D.FoldGuard("causal", docs_dir=td).check({"CONF_A"}), PermissionError)
+        finally:
+            C.CFG.SMOKE_TEST = _smoke
+        halves = [D.conf_half(s) for s in range(1000, 1400)]
+        detail["conf_half_rule_is_deterministic_and_two_sided"] = halves == [D.conf_half(s) for s in range(1000, 1400)] and set(halves) == {"CONF_A", "CONF_B"}
         d2, counts = D.attach_folds(df.copy(), sp, ("FIT", "VAL"), D.FoldGuard("train")); detail["reserved_folds_dropped_from_memory"] = set(d2["fold"].unique()) <= {"FIT", "VAL"}
         detail["preprocessor_fit_refuses_non_FIT_rows"] = _raises(lambda: D.Preprocessor(static_cols=sr).fit(d2, np.ones(len(d2), bool), fold=d2["fold"].to_numpy()), PermissionError)
     ok &= all(v is True for k, v in detail.items())

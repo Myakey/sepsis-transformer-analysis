@@ -26,6 +26,8 @@ class Paths:
     V3_FINAL_DIR: str = f"{DRIVE}/sepsis_softmax_pass3/v3/final_i0pe1e0ema0ah0"       # v3 checkpoints + correlational_summary.json (read-only)
     PHYSIONET_ZIP: str = f"{DRIVE}/Datasets/sepsis_training_data.zip"
     PHYSIONET_DIR: str = "/content/sepsis_data"
+    V3_CORR_SUMMARY: str = f"{DRIVE}/sepsis_softmax_pass3/v3/final_i0pe1e0ema0ah0/correlation/correlational_summary.json"   # v3's DISCOVERY / SCREEN stay IDs
+    EXT_LEDGER: str = os.environ.get("SEPSIS_EXT_LEDGER", f"{DRIVE}/sepsis_v4/EXT_ACCESS.json")    # the single EXT pass is recorded here
     # --- everything v4 writes (checkpoints, caches, manifest). Never a v1-v3 folder. ---
     WORK_DIR: str = os.environ.get("SEPSIS_WORK_DIR", f"{DRIVE}/sepsis_v4")
     LOCAL_DIR: str = os.environ.get("SEPSIS_LOCAL_DIR", "/content/sepsis_work_v4")
@@ -91,6 +93,21 @@ class Cfg:
     CORR_SEVERITY_COL: str = "SOFA_total"
     CORR_N_STAYS: int = 800; CORR_MIN_LEN: int = 24; CORR_MIN_T: int = 8; CORR_Q_PER_STAY: int = 24
     CORR_SESOI: float = 0.05; CORR_BAND_Q: float = 95.0; CORR_TOP_K: int = 6
+    # ---- Phase 3-5 constants: Docs/PREREGISTRATION.md, frozen 2026-11-15. Changing any of them is a deviation (Docs/DEVIATIONS.md). ----
+    CORR_CAPTURE_BATCH: int = 8
+    SEED_RULE_N: int = 5                                     # 5.6: PRESENT = 5 of 5 seeds, ABSENT = at least 4 of 5
+    MASS_FLOOR: float = 0.05; KNOCKOUT_MIN_DROP: float = 0.01          # 6.2
+    S5_I2: float = 0.75; S5_FDR_Q: float = 0.10; FDR_Q: float = 0.05   # 9 (S5), 5.10
+    CAUSAL_N_BASES: int = 2000; CAUSAL_MAX_PER_STAY: int = 3            # 7.1
+    CAUSAL_MIN_K: int = 3; CAUSAL_MIN_T: int = 8; CAUSAL_MIN_GAP: int = 6
+    CAUSAL_Q_SEVERE: float = 90.0; CAUSAL_Q_ROUTINE: float = 50.0
+    CAUSAL_TOL_ICULOS: float = 4.0; CAUSAL_TOL_NMEAS: int = 2; CAUSAL_TOL_VITALS_SD: float = 1.0
+    CAUSAL_N_BOOT: int = 2000; CAUSAL_BATCH: int = 16
+    IIA_TAU: float = 0.3; IIA_MARGIN: float = 0.05; IIA_N_PERM: int = 5 # 7.7
+    S4_DELTA: float = 2.0; S6_SCALES: tuple = (0.5, 2.0)                # 7.2
+    KAPPA_BUDGET: tuple = (0.5, 1.5); KAPPA_INDEP: tuple = (-0.25, 0.25)  # 7.5
+    DAS_DIMS: tuple = (1, 2, 4, 8, 16)                                  # 7.8
+    NONINF_MARGIN: float = 0.01; DELETE_FRACTION: float = 0.20; STABILITY_MIN: float = 0.5   # 10
     # ---- MLflow ----
     USE_DAGSHUB: bool = True
     MLFLOW_EXPERIMENT: str = "sepsis-attention-v4"
@@ -100,6 +117,7 @@ class Cfg:
     def apply_smoke(self):
         self.SMOKE_TEST = True
         self.FINAL_MAX_EPOCHS, self.FINAL_PATIENCE, self.SOUP_TOP_K = 2, 2, 2
+        self.CORR_N_STAYS, self.CAUSAL_N_BASES, self.CAUSAL_N_BOOT = 40, 60, 200      # sizes only; no threshold changes in smoke mode
         if not self.RUN_NAME.endswith("_smoke"): self.RUN_NAME += "_smoke"
         return self
 

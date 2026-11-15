@@ -12,3 +12,12 @@ Rules in force: `Resources/attention_method_8_points.pdf` (treated as pre-regist
 - The control band, the DV, the SESOI (0.05), the band quantile (P95) and `CORR_TOP_K = 6` are unchanged from v3.
 - Extra controls (aux-off shuffled-label, budget-matched shuffled-label) are reported **beside** the band and never enter or move it.
 - Kernel attention inside the trunk is an exploratory third variant, outside the pre-registered softmax-vs-sigmoid contrast.
+
+## Proposed, awaiting Miaki's approval (not in force)
+
+Found while building `04` on 2026-11-15, after the freeze. Nothing has been run. Until a row is approved, the code follows the frozen text.
+
+| # | Date | Rule affected | Proposed change | Reason | Status |
+|---|---|---|---|---|---|
+| P1 | 2026-11-15 | `PREREGISTRATION.md` 7.7 (floor) and 7.9 (rung 1: "IIA(M0) beats the floor") | For a model that predicts a **constant** vector (M0 always; M2 and, mostly, M1 under do(Priority)), take the floor from a random key alignment: the same match rule with the direct effect d read at a random key of S instead of at k. The floor for models that predict structure stays the permuted-log-P floor. | The frozen floor permutes log P within S. For a constant-prediction model the match is "no rank structure, and d has the predicted sign"; permuting log P leaves both parts unchanged when there is no structure, so the model's IIA equals its floor by construction and **rung 1 can never be met as written**. This is an error in the draft I wrote, found before any data was seen. | Awaiting approval. `04` computes both floors and prints both; the rung decision uses the frozen floor (`IIA_FLOOR_CONSTANT = "prereg"`) until this is approved. |
+| P2 | 2026-11-15 | `PREREGISTRATION.md` 7.8 (DAS "held-out IIA") | Define a DAS match: the patched t+1 logit moves in the direction of the source run and by at least half as much; pairs whose source effect is below 5 % of the SD of the base logit are dropped. Site: residual stream entering the layer chosen on LOC (largest whole-component restoration among layers ≥ 2), hour k; target of training: the three output logits of the source run. | 7.8 fixes the controls, the margin and the subspace sizes but not what counts as a match for a learned subspace. DAS runs only if no hand-specified model beats the floor. | Awaiting approval. Until then DAS output is labelled provisional. |

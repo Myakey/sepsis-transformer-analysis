@@ -2,7 +2,7 @@
 
 Governance: nothing here prints or returns row-level data to a notebook cell; callers print the aggregate `stats` dicts only.
 """
-import os, json, hashlib, types
+import os, json, hashlib, time, types
 import numpy as np
 import pandas as pd
 
@@ -83,25 +83,72 @@ def load_frozen_split(sources=None, expect_sha=None, cfg=None):
     raise FileNotFoundError(f"frozen split not found in {list(sources)}. v4 never re-derives it; restore the v2/v3 subject_split.parquet.")
 
 
-class FoldGuard:
-    """Which folds a notebook stage may load. FIT/VAL always; LOC and EXT only in the causal stage; CONF only once the
-    pre-registration is frozen (Docs/PREREGISTRATION.md plus the stamp file Docs/PREREGISTRATION.frozen)."""
-    STAGE_FOLDS = {"train": {"FIT", "VAL"}, "correlational": {"FIT", "VAL"}, "causal": {"FIT", "VAL", "LOC", "CONF", "EXT"},
-                   "fix": {"FIT", "VAL", "CONF"}, "final_ext": {"FIT", "VAL", "EXT"}}
+CONF_SALT = "65441cff1a47"          # the literal in the frozen rule (PREREGISTRATION.md section 3); equal to the split sha1
 
-    def __init__(self, stage="train", docs_dir=None):
+
+def conf_half(subject_id):
+    """Pre-registered, data-free rule: a CONF subject is in CONF-A iff int(sha1(f"{subject_id}|CONF|65441cff1a47"), 16) is even."""
+    return "CONF_A" if int(hashlib.sha1(f"{int(subject_id)}|CONF|{CONF_SALT}".encode()).hexdigest(), 16) % 2 == 0 else "CONF_B"
+
+
+def _read_ledger(path):
+    return json.load(open(path)) if os.path.exists(path) else {}
+
+
+def ext_ledger_close(report_path, ledger=None):
+    """Call once, when the single EXT pass has written its report. After this EXT can never be loaded again."""
+    path = ledger or C.PATHS.EXT_LEDGER; led = _read_ledger(path)
+    if led.get("status") != "open": raise RuntimeError("the EXT ledger is not open; nothing to close")
+    led.update(status="closed", closed=time.strftime("%Y-%m-%dT%H:%M:%S"), report=str(report_path))
+    json.dump(led, open(path, "w"), indent=1); return led
+
+
+class FoldGuard:
+    """Which folds a notebook stage may load (PREREGISTRATION.md section 3). Fold names: FIT, VAL, LOC, CONF_A, CONF_B, EXT.
+      - nothing reserved is loadable until the pre-registration is frozen (PREREGISTRATION.md plus PREREGISTRATION.frozen);
+      - CONF is never loadable whole: CONF_A belongs to notebook 04 (stage "causal"), CONF_B to notebook 05 (stage "fix");
+      - CONF_A stays closed until Docs/LOC_CHOICES.md is committed (every choice made on LOC is fixed first);
+      - EXT is loadable only by stage "final_ext", only when the completion markers of 04 and 05 exist, never in smoke mode, and
+        only until the single pass is closed in the ledger (ext_ledger_close)."""
+    STAGE_FOLDS = {"train": {"FIT", "VAL"}, "correlational": {"FIT", "VAL"}, "causal": {"FIT", "VAL", "LOC", "CONF_A"},
+                   "fix": {"FIT", "VAL", "CONF_B"}, "final_ext": {"FIT", "VAL", "EXT"}}
+    RESERVED = {"LOC", "CONF", "CONF_A", "CONF_B", "EXT"}
+
+    def __init__(self, stage="train", docs_dir=None, ledger=None, prerequisites=None):
         if stage not in self.STAGE_FOLDS: raise ValueError(f"unknown stage '{stage}'")
         self.stage, self.docs_dir = stage, docs_dir or C.PATHS.DOCS_DIR
+        self.ledger = ledger or C.PATHS.EXT_LEDGER; self.prerequisites = list(prerequisites or [])
 
     def prereg_frozen(self):
         return os.path.exists(os.path.join(self.docs_dir, "PREREGISTRATION.md")) and os.path.exists(os.path.join(self.docs_dir, "PREREGISTRATION.frozen"))
 
+    def loc_choices_committed(self):
+        return os.path.exists(os.path.join(self.docs_dir, "LOC_CHOICES.md"))
+
     def check(self, folds):
-        folds = set(folds); bad = folds - self.STAGE_FOLDS[self.stage]
+        folds = set(folds)
+        if "CONF" in folds:
+            raise PermissionError("CONF is never loaded whole: ask for CONF_A (notebook 04) or CONF_B (notebook 05). See PREREGISTRATION.md section 3.")
+        bad = folds - self.STAGE_FOLDS[self.stage]
         if bad: raise PermissionError(f"stage '{self.stage}' may not load folds {sorted(bad)} (allowed: {sorted(self.STAGE_FOLDS[self.stage])})")
-        if folds & {"CONF", "EXT", "LOC"} and not self.prereg_frozen():
+        if folds & self.RESERVED and not self.prereg_frozen():
             raise PermissionError("reserved folds stay untouched until Docs/PREREGISTRATION.md is frozen (PREREGISTRATION.frozen stamp missing)")
+        if folds & {"CONF_A", "CONF_B", "EXT"} and C.CFG.SMOKE_TEST:
+            raise PermissionError("CONF-A, CONF-B and EXT are never loaded in smoke mode; a dry run confirms on LOC instead")
+        if "CONF_A" in folds and not self.loc_choices_committed():
+            raise PermissionError("CONF-A stays closed until Docs/LOC_CHOICES.md is committed and pulled (run the LOC stage of 04 first)")
+        if "EXT" in folds: self._open_ext()
         return True
+
+    def _open_ext(self):
+        missing = [p for p in self.prerequisites if not os.path.exists(p)]
+        if not self.prerequisites or missing:
+            raise PermissionError(f"EXT is loaded once, after 04 and 05 are complete: completion marker(s) missing {missing or '(none were given)'}")
+        led = _read_ledger(self.ledger)
+        if led.get("status") == "closed":
+            raise PermissionError(f"EXT was already used for its single pass (closed {led.get('closed')}, report {led.get('report')}); it cannot be loaded again")
+        led.setdefault("opened", []).append(dict(time=time.strftime("%Y-%m-%dT%H:%M:%S"), run=C.CFG.RUN_NAME, core_commit=os.environ.get("SEPSIS_CORE_COMMIT", "unknown")))
+        led["status"] = "open"; os.makedirs(os.path.dirname(self.ledger), exist_ok=True); json.dump(led, open(self.ledger, "w"), indent=1)
 
 
 def attach_folds(df, split, folds=("FIT", "VAL"), guard=None, cfg=None):
@@ -111,6 +158,11 @@ def attach_folds(df, split, folds=("FIT", "VAL"), guard=None, cfg=None):
     if not df["fold"].notna().all(): raise RuntimeError("some subjects in the data are absent from the frozen split table")
     if not (df.groupby(cfg.SUBJECT_COL)["fold"].nunique() == 1).all(): raise RuntimeError("a subject spans folds (leak)")
     counts = df.groupby("fold")[cfg.SUBJECT_COL].nunique().to_dict()
+    if any(str(f).startswith("CONF_") for f in folds):                       # CONF is split by the frozen sha1-parity rule, never loaded whole
+        is_conf = (df["fold"] == "CONF").to_numpy()
+        half = {s: conf_half(s) for s in df.loc[is_conf, cfg.SUBJECT_COL].unique()}
+        df.loc[is_conf, "fold"] = df.loc[is_conf, cfg.SUBJECT_COL].map(half).to_numpy()
+        counts.update({h: int(sum(v == h for v in half.values())) for h in ("CONF_A", "CONF_B")})
     df = df[df["fold"].isin(list(folds))].copy(); df.reset_index(drop=True, inplace=True)
     assert set(df["fold"].unique()) <= set(folds)
     return df, counts

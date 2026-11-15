@@ -2,4 +2,4 @@
 
     from sepsis_core import config as C, data, dataset, models, engine, metrics, calibration, balancing, attention, controls, gbdt, runs, plots, physionet, controls, gbdt, runs, plots, physionet, controls, gbdt, runs, plots, physionet, tracking, synthetic, tests
 """
-__version__ = "4.1.0-phase2"
+__version__ = "4.2.0-phase3"
