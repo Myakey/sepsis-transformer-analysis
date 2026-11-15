@@ -157,8 +157,9 @@ def stay_ols(Xc, Y, cluster=None):
     """Xc (P,p) covariates, Y (P,K) DVs, both standardised within stay -> standardised b1 (K,), its OLS SE (K,) [v3], and, if `cluster`
     (P,) is given, a cluster-robust (CR1) SE (K,) for the same coefficient."""
     K = Y.shape[1]; nanv = np.full(K, np.nan)
+    if len(Xc) <= Xc.shape[1] + 2: return nanv, nanv.copy(), (nanv.copy() if cluster is not None else None)      # too few rows (also: empty design)
     mu, sd = Xc.mean(0), Xc.std(0)
-    if len(Xc) <= Xc.shape[1] + 2 or sd[0] < 1e-8: return nanv, nanv.copy(), (nanv.copy() if cluster is not None else None)
+    if sd[0] < 1e-8: return nanv, nanv.copy(), (nanv.copy() if cluster is not None else None)                    # severity constant within this stay
     Xs = np.where(sd > 1e-8, (Xc - mu) / np.where(sd > 1e-8, sd, 1.0), 0.0)
     ysd = Y.std(0); Ys = (Y - Y.mean(0)) / np.where(ysd > 1e-8, ysd, np.nan)
     Am = np.c_[np.ones(len(Xs)), Xs]; Gi = np.linalg.pinv(Am.T @ Am)
@@ -401,9 +402,13 @@ def sensitivity(tr, arm, cfg=None, threshold=None):
     cfg = cfg or C.CFG; K = tr["K"]; di = tr["dvs"].index(PRIMARY_DV.get(arm, "clr")); cols = slice(di * K, (di + 1) * K); rows = []; pvals = {}
     prim = _meta(tr, "DISCOVERY", "real", cols)
     def row(name, m):
-        r = np.corrcoef(np.nan_to_num(prim["est"]), np.nan_to_num(m["est"]))[0, 1] if prim is not None else float("nan")
-        rows.append(dict(analysis=name, max_abs_b1=float(np.nanmax(np.abs(m["est"]))), heads_beyond_primary_threshold=(int((np.abs(m["est"]) > threshold).sum()) if threshold else None),
-                         correlation_with_primary=float(r), b1=_l(m["est"])))
+        n_st = int(np.nanmax(m["k"])) if np.isfinite(m["k"]).any() else 0
+        if not np.isfinite(m["est"]).any():                     # e.g. a SOFA component that never changes within a stay: b1 is not estimable in fewer than 3 stays
+            rows.append(dict(analysis=name, n_stays=n_st, estimable=False, max_abs_b1=None, heads_beyond_primary_threshold=None, correlation_with_primary=None, b1=_l(m["est"]))); return
+        ok = np.isfinite(m["est"]) & np.isfinite(prim["est"]) if prim is not None else None
+        r = float(np.corrcoef(prim["est"][ok], m["est"][ok])[0, 1]) if ok is not None and ok.sum() >= 3 and np.std(m["est"][ok]) > 0 and np.std(prim["est"][ok]) > 0 else float("nan")
+        rows.append(dict(analysis=name, n_stays=n_st, estimable=True, max_abs_b1=float(np.nanmax(np.abs(m["est"]))),
+                         heads_beyond_primary_threshold=(int((np.abs(m["est"]) > threshold).sum()) if threshold else None), correlation_with_primary=r, b1=_l(m["est"])))
     for (split, v) in sorted(tr["fits"]):
         if split != "DISCOVERY": continue
         if v.startswith("sev:"):
