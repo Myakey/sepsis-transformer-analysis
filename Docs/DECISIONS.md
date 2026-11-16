@@ -135,4 +135,39 @@ Items marked **→ PREREG** must be copied into `Docs/PREREGISTRATION.md` before
 | C45 | **Partial-SOFA proxy** thresholds are those of the SOFA table in Singer et al. 2016 (in `Resources/`): MAP < 70; platelets < 150/100/50/20; bilirubin ≥ 1.2/2.0/6.0/12; creatinine ≥ 1.2/2.0/3.5/5.0. | Exploratory set-B screen. |
 | C46 | **Track D tools only** (`sepsis_core/explain.py`): six explanation methods, deletion/insertion, comprehensiveness/sufficiency, seed stability, scorecard. No candidate is chosen or built. Integrated Gradients uses the "nothing measured" hour as its reference input, 32 steps. | Candidate choice waits for the results of 03/04 (pre-registration section 10). |
 
-Open: P1 and P2 in `DEVIATIONS.md` need a decision before the CONF-A stage of `04` is read.
+~~Open: P1 and P2 in `DEVIATIONS.md` need a decision before the CONF-A stage of `04` is read.~~ Closed 2026-11-15, see A20.
+
+## 2026-11-15/16 · After the LOC stage of `04`; notebook 05 built ahead of CONF-A
+
+| # | Decision |
+|---|---|
+| A20 | **Deviations P1 and P2 approved by Miaki (2026-11-15), after the LOC stage of `04` and before CONF-A was loaded.** P1: the IIA floor for constant-prediction models is the random-key floor. P2: the DAS match rule. Recorded in `DEVIATIONS.md`. `04` Cell 2 now defaults to `STAGE = "CONF_A"`, `IIA_FLOOR_CONSTANT = "random_key"`, and Cell 14 always computes the other floor beside the one in force (`iia_alternative_floor`, `M0_beats_floor_under_the_other_floor`), so the frozen-floor result is still reported. |
+| A21 | **`Docs/LOC_CHOICES.md` committed** (id `e4d69acf633b…`, core commit `026f3e7`). LOC stage reviewed: every exact check 0.0; 2,000 pairs per part. CONF-A may be opened. |
+| A22 | **Miaki asked for notebook 05 to be built now** (2026-11-15), ahead of CONF-A, replacing the earlier instruction to wait. The candidates are therefore not chosen by hand: `05` applies the decision table of section 10 to the saved results of `03`/`04` at run time. `Docs/PREREG_ADDENDUM_TRACK_D.md` fixes the rule, each candidate's model, primary explanation and hyperparameters, and every reading section 10 left open. It was written before CONF-A, CONF-B or any `05` model existed. |
+
+Calls made while building `05` (Claude; accepted unless you object). Nothing was executed.
+
+| # | Call | Why |
+|---|---|---|
+| C47 | **The variable-level-token candidate (`vartok`) keeps the hourly trunk and puts the measurements in the readout**: one token per measured variable per hour, read out by a 4-head attention layer whose weighted sum is the logit (additive, STraTS-I style). New code only in `sepsis_core/fix.py`; no existing module was edited. | A flat sequence of all measurements costs up to ~1,300× per layer. The additive readout makes every prediction an exact sum of contributions of named measurements, which is what "interpretable by design" has to mean here. |
+| C48 | **`vartok`'s primary explanation is the additive hour contribution**, not its attention weight. In the section 5 screen it is each readout head's hour contribution to the t+6 logit, centred within the query row. | It is the model's own exact decomposition; an attention weight carries no sign. The screen standardises the DV within stay, so a signed quantity needs no change to the estimator. |
+| C49 | **Row 2 ("floor-effect fraction above 5 %") is read as: at least one head above 5 % at the softmax primary seed**, the quantity `03` already reports. Fixed after seeing the value (1 head of 32), and flagged as such in the addendum; the stricter reading would not fire. It adds `sigmoid` to the scorecard at no training cost. | The sentence in section 10 did not say per head or on average. Miaki can overrule before the VAL stage of `05`. |
+| C50 | **Sigmoid, not entmax-1.5**, for row 2; **kernel counts as the second new architecture** for row 1 (two more seeds are trained so that it has five). | "At most two new architectures." Sigmoid already has five seeds and controls. |
+| C51 | **Item 3 pools the five seeds per readout** before the subject-level paired bootstrap; **S6 is read strictly** (items 1–4 on VAL, 1–3 on CONF-B), with the weaker "sanity at non-inferior AUROC on both" reported beside it under its own label. | Section 10 did not say which seed item 3 uses, nor define "passes the scorecard". The strict reading cannot inflate a claim. |
+| C52 | **On CONF-B the screen draws its own DISCOVERY / SCREEN stays (v3 procedure, fixed seed) and builds its own band**; gate D1 uses the `02` LightGBM model scored on CONF-B. In smoke mode CONF-B is never loaded: the dry run uses a second draw of VAL. | "With everything frozen" fixes procedures, not numbers that are properties of the stays. |
+| C53 | **Gradient methods for `vartok` use one path variable per hour** (0 = hour not measured, 1 = as measured). For the other models this equals the existing embedding-path computation. | The existing Integrated Gradients path runs through the per-hour embedding only and would miss the token route. |
+| C54 | **`04` was edited after the LOC run, in three places only**: Cell 2 defaults (A20), Cell 14 (the other floor is computed whichever floor is in force) and Cell 18 (the name of the other floor is saved). `causal.py` is unchanged, so the cached LOC battery and the committed LOC choices stay valid. | P1 in force must not make the frozen-floor result disappear from the report. |
+
+## 2026-11-16 · Side notebook 06: architecture benchmark (lecturer track, performance only)
+
+| # | Decision |
+|---|---|
+| A23 | **Miaki asked for `06_architecture_benchmark`**: GRU-D (full), LSTM and a minimal RWKV against `softmax_s42`, `ka_s42` and LightGBM. FIT/VAL only, same protocol as 01/02, a 3-value learning-rate grid per baseline chosen on VAL, 3 seeds. It is one of the optional performance analyses of pre-registration section 12 (GRU-D/LSTM are named there; RWKV is the same kind of analysis), so it is **not a deviation**. It makes no interpretability claim, touches no reserved fold and does not depend on 03–05. The report states that our Transformer had 30 Optuna trials on the same VAL fold and the baselines 3. |
+
+| # | Call | Why |
+|---|---|---|
+| C55 | **New code only in `sepsis_core/baselines.py`**; no existing module edited. Sizes are fixed, not tuned: GRU-D hidden 512; LSTM 2 × 512; RWKV 4 blocks × 512 (about the KA-Transformer's parameter count). Learning-rate grid 1e-4, 3e-4, 1e-3; every other training setting is the Transformer's. No auxiliary head (as for KA). | The request: tune the learning rate only, and report parameter counts. |
+| C56 | **What each baseline is given**: forward-filled value, observed mask, log time since the last measurement, statics, and the ICU hour (sinusoidal encoding for LSTM and RWKV, as in the Transformer; three scalar functions of the hour for GRU-D). GRU-D reads the raw value, mask and gap and builds its own decayed input with the project's `GRUDInputDecay`, plus hidden-state decay on a log-scaled gap. | "Each model sees what the Transformer sees." The Transformer knows the hour through its positional encoding. |
+| C57 | **RWKV is RWKV-4 style, written from the published equations**: time-mixing with the exact WKV average computed as one lower-triangular product over the window (no custom kernel), channel-mixing, pre-LN blocks. Initial constants follow the pattern of the public code, not a copy; no pretrained weights. | Windows are at most 168 h, so the exact product is cheap and needs no recurrence trick. |
+| C58 | **Cell 8 of `06` adds the Track D models to the report table if `05` has trained them**, labelled "not a benchmark entry". | So the table can be filled once, after 04 and 05. |
+
