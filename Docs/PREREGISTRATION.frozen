@@ -9,3 +9,4 @@ split sha1:  65441cff1a47
 
 After this stamp the file is not edited. Every change goes in Docs/DEVIATIONS.md with date, reason and approval, before the affected analysis runs.
 CONF-A / CONF-B subject counts (rule in section 3): to be appended below the first time the split table is read in 04. Nothing else is appended.
+CONF-A / CONF-B subject counts (read in 04, stage CONF_A, 2026-11-16, core commit b06e98b): CONF_A 4060 | CONF_B 4167 | total 8227 (= CONF in the split table)
