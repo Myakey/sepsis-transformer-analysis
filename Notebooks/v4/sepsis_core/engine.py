@@ -71,6 +71,8 @@ def predict_loader(model, loader, criterion=None, as_logits=False):
 def attention_mass(model, loader, n_batches=2):
     """Mean total attention mass M_t = sum_j a_tj over real queries, per layer. Exactly 1 for softmax arms; free for sigmoid / kernel_raw.
     Logged every epoch (PDF Part D): collapse toward 0 = attention bypassed; unbounded growth = scale drift."""
+    if not attention_modules(model): return {}    # GRU-D / LSTM / RWKV baselines (and any model without attention): nothing to measure, and
+                                                  # returning before the loader is touched keeps the random stream untouched too
     model.eval(); sums = None; cnt = 0
     rng_state = torch.get_rng_state()             # iterating a DataLoader draws from the global generator; restore it afterwards so the
     try:                                          # training random stream (dropout, shuffling) is exactly what it would be without this probe
@@ -85,7 +87,7 @@ def attention_mass(model, loader, n_batches=2):
         per_layer = [(m.attention_weights.float().sum(-1).mean(1) * real).sum() for m in attention_modules(model)]
         sums = per_layer if sums is None else [a + c for a, c in zip(sums, per_layer)]; cnt += float(real.sum())
         release_attn_cache(model)
-    if not cnt: return {}
+    if not cnt or not sums: return {}
     per = [float(s) / cnt for s in sums]
     return {"mass_mean": float(np.mean(per)), **{f"mass_L{l + 1}": v for l, v in enumerate(per)}}
 
@@ -212,7 +214,7 @@ def fit(hp, store, fit_idx, val_idx, *, max_epochs, patience, seed, alpha=None, 
                        frac_zero_pos_batches=zero_pos / max(nb, 1), epoch_sec=time.time() - t0, **met, **mass)
             history.append(rec); T.m_metrics({k: v for k, v in rec.items() if k != "epoch"}, step=ep)
             print(f"{log_prefix}ep{ep:02d} loss={rec['train_loss']:.4f}" + (f" aux={rec['aux_loss']:.3f}" if aux_w > 0 else "") +
-                  f" val_loss={vloss:.4f} | AUROC {met['auroc_mean']:.4f} AUPRC {met['auprc_mean']:.4f} | mass {mass.get('mass_mean', float('nan')):.3f} | "
+                  f" val_loss={vloss:.4f} | AUROC {met['auroc_mean']:.4f} AUPRC {met['auprc_mean']:.4f} | mass {('%.3f' % mass['mass_mean']) if 'mass_mean' in mass else 'n/a'} | "
                   f"lr {rec['lr']:.2e} | {rec['epoch_sec']:.0f}s")
             if last_path:
                 torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), sched=sched.state_dict(), scaler=scaler.state_dict(), best=best, bad=bad,
